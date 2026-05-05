@@ -25,29 +25,41 @@ $action = isset($_GET['action']) ? $_GET['action'] : 'home';
 
 $message = '';
 if ($logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['add_iscritto'])) {
-        // Aggiungi iscritto
-        $id_corso = $_POST['id_corso'];
-        $id_membro = $_POST['id_membro'];
-        $orario = $_POST['orario'];
+    try {
+        if (isset($_POST['add_iscritto'])) {
+            $id_corso = $_POST['id_corso'];
+            $id_membro = $_POST['id_membro'];
+            $orario = $_POST['orario'];
 
-        $stmt = $pdo->prepare("INSERT INTO Iscrizioni_Corsi (id_corso, id_membro, data_iscrizione, orario_preferito) VALUES (?, ?, CURDATE(), ?)");
-        $stmt->execute([$id_corso, $id_membro, $orario]);
-        $message = 'Iscritto aggiunto!';
+            $stmt = $pdo->prepare("INSERT INTO Iscrizioni_Corsi (id_corso, id_membro, data_iscrizione, orario_preferito) VALUES (?, ?, CURDATE(), ?)");
+            $stmt->execute([$id_corso, $id_membro, $orario]);
+            $message = 'Iscritto aggiunto!';
 
-    } elseif (isset($_POST['change_corso'])) {
-        $id_iscrizione = $_POST['id_iscrizione'];
-        $nuovo_corso = $_POST['nuovo_corso'];
+        } elseif (isset($_POST['change_corso'])) {
+            $id_iscrizione = $_POST['id_iscrizione'];
+            $nuovo_corso = $_POST['nuovo_corso'];
 
-        $stmt = $pdo->prepare("UPDATE Iscrizioni_Corsi SET id_corso = ? WHERE id_iscrizione = ?");
-        $stmt->execute([$nuovo_corso, $id_iscrizione]);
-        $message = 'Corso cambiato!';
+            $stmt = $pdo->prepare("UPDATE Iscrizioni_Corsi SET id_corso = ? WHERE id_iscrizione = ?");
+            $stmt->execute([$nuovo_corso, $id_iscrizione]);
+            $message = 'Corso cambiato!';
+        }
+    } catch (Exception $e) {
+        $message = 'Errore: ' . $e->getMessage();
     }
 }
 
-$corsi = $pdo->query("SELECT * FROM Corsi ORDER BY nome_corso")->fetchAll();
-$membri = $pdo->query("SELECT * FROM Membri ORDER BY nome, cognome")->fetchAll();
-$istruttori = $pdo->query("SELECT * FROM Istruttori ORDER BY nome, cognome")->fetchAll();
+try {
+    $corsi = $pdo->query("SELECT * FROM Corsi ORDER BY nome_corso")->fetchAll();
+    $membri = $pdo->query("SELECT * FROM Membri ORDER BY nome, cognome")->fetchAll();
+    $istruttori = $pdo->query("SELECT * FROM Istruttori ORDER BY nome, cognome")->fetchAll();
+} catch (Exception $e) {
+    $corsi = [];
+    $membri = [];
+    $istruttori = [];
+    if ($logged_in) {
+        $message = 'Errore database: ' . $e->getMessage();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="it">
@@ -123,9 +135,8 @@ $istruttori = $pdo->query("SELECT * FROM Istruttori ORDER BY nome, cognome")->fe
 
             <?php elseif ($action == 'top'): ?>
                 <h2>Corsi con Più Iscritti (min 5)</h2>
-                <table>
-                    <tr><th>Istruttore</th><th>Corso</th><th>Iscritti</th></tr>
-                    <?php
+                <?php
+                try {
                     $stmt = $pdo->query("
                             SELECT i.nome, i.cognome, c.nome_corso, COUNT(ic.id_iscrizione) as num
                             FROM Istruttori i
@@ -135,14 +146,28 @@ $istruttori = $pdo->query("SELECT * FROM Istruttori ORDER BY nome, cognome")->fe
                             HAVING num >= 5
                             ORDER BY i.nome, num DESC
                         ");
-                    while ($row = $stmt->fetch()): ?>
+                    $has_results = false;
+                    while ($row = $stmt->fetch()):
+                        if (!$has_results) {
+                            echo '<table><tr><th>Istruttore</th><th>Corso</th><th>Iscritti</th></tr>';
+                            $has_results = true;
+                        }
+                        ?>
                         <tr>
                             <td><?php echo $row['nome'] . ' ' . $row['cognome']; ?></td>
                             <td><?php echo $row['nome_corso']; ?></td>
                             <td><?php echo $row['num']; ?></td>
                         </tr>
-                    <?php endwhile; ?>
-                </table>
+                    <?php endwhile;
+                    if ($has_results) {
+                        echo '</table>';
+                    } else {
+                        echo '<p style="color: #666; font-style: italic;">Nessun corso con almeno 5 iscritti.</p>';
+                    }
+                } catch (Exception $e) {
+                    echo '<div class="error">Errore: ' . $e->getMessage() . '</div>';
+                }
+                ?>
 
             <?php elseif ($action == 'list'): ?>
                 <h2>Iscritti Corso</h2>
@@ -150,11 +175,53 @@ $istruttori = $pdo->query("SELECT * FROM Istruttori ORDER BY nome, cognome")->fe
                 $corso_sel = isset($_GET['corso']) ? $_GET['corso'] : '';
                 if ($corso_sel): ?>
                     <h3>Iscritti a <?php echo $corsi[array_search($corso_sel, array_column($corsi, 'id_corso'))]['nome_corso']; ?></h3>
-                    <table>
-                        <tr><th>Nome</th><th>Cognome</th><th>Azione</th></tr>
+                    <?php
+                    try {
+                        $stmt = $pdo->prepare("
+                                SELECT ic.id_iscrizione, m.nome, m.cognome
+                                FROM Iscrizioni_Corsi ic
+                                JOIN Membri m ON ic.id_membro = m.id_membro
+                                WHERE ic.id_corso = ?
+                                ORDER BY m.nome, m.cognome
+                            ");
+                        $stmt->execute([$corso_sel]);
+                        $has_results = false;
+                        while ($row = $stmt->fetch()):
+                            if (!$has_results) {
+                                echo '<table><tr><th>Nome</th><th>Cognome</th><th>Azione</th></tr>';
+                                $has_results = true;
+                            }
+                            ?>
+                            <tr>
+                                <td><?php echo $row['nome']; ?></td>
+                                <td><?php echo $row['cognome']; ?></td>
+                                <td>
+                                    <form method="POST" style="display:inline;">
+                                        <input type="hidden" name="id_iscrizione" value="<?php echo $row['id_iscrizione']; ?>">
+                                        <select name="nuovo_corso" required>
+                                            <option value="">Nuovo Corso</option>
+                                            <?php foreach ($corsi as $corso): ?>
+                                                <option value="<?php echo $corso['id_corso']; ?>">
+                                                    <?php echo $corso['nome_corso']; ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button type="submit" name="change_corso">Cambia</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endwhile;
+                        if ($has_results) {
+                            echo '</table>';
+                        } else {
+                            echo '<p style="color: #666; font-style: italic;">Nessun iscritto per questo corso.</p>';
+                        }
+                    } catch (Exception $e) {
+                        echo '<div class="error">Errore: ' . $e->getMessage() . '</div>';
+                    }
+                    ?>
 
     <?php endif; ?>
 </div>
 </body>
 </html>
-

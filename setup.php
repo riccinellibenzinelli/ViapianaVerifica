@@ -1,6 +1,5 @@
 <?php
 
-
 $db_host = 'localhost';
 $db_user = 'root';
 $db_pass = '';
@@ -30,6 +29,7 @@ try {
             $pdo->exec($statement);
         }
     }
+
     echo "✓ Dati importati con successo!<br>";
     echo "<br><strong>Setup completato!</strong><br>";
     echo "Puoi ora accedere all'applicazione:<br>";
@@ -41,5 +41,5 @@ try {
 } catch (PDOException $e) {
     echo "Errore: " . $e->getMessage();
 }
-
+?>
 
