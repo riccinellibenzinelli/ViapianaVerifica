@@ -220,7 +220,78 @@ try {
                         echo '<div class="error">Errore: ' . $e->getMessage() . '</div>';
                     }
                     ?>
+                <?php else: ?>
+                    <form method="GET">
+                        <input type="hidden" name="action" value="list">
+                        <select name="corso" onchange="this.form.submit()">
+                            <option value="">Scegli Corso</option>
+                            <?php foreach ($corsi as $corso): ?>
+                                <option value="<?php echo $corso['id_corso']; ?>">
+                                    <?php echo $corso['nome_corso']; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                <?php endif; ?>
 
+            <?php elseif ($action == 'report'): ?>
+                <h2>Report Completo</h2>
+                <?php
+                try {
+                    $istruttori_corsi = $pdo->query("
+                            SELECT i.id_istruttore, i.nome as i_nome, i.cognome as i_cognome, 
+                                   c.id_corso, c.nome_corso, c.livello_difficolta, c.durata_minuti
+                            FROM Istruttori i
+                            LEFT JOIN Corsi c ON i.id_istruttore = c.id_istruttore
+                            ORDER BY i.nome, i.cognome, c.nome_corso
+                        ")->fetchAll(PDO::FETCH_ASSOC);
+
+                    $iscrizioni = $pdo->query("
+                            SELECT ic.id_corso, m.nome as m_nome, m.cognome as m_cognome, 
+                                   ic.data_iscrizione, ic.orario_preferito
+                            FROM Iscrizioni_Corsi ic
+                            JOIN Membri m ON ic.id_membro = m.id_membro
+                            ORDER BY ic.id_corso, m.nome, m.cognome
+                        ")->fetchAll(PDO::FETCH_ASSOC);
+
+                    $iscrizioni_per_corso = [];
+                    foreach ($iscrizioni as $isc) {
+                        $iscrizioni_per_corso[$isc['id_corso']][] = $isc;
+                    }
+
+                    $current_istr = '';
+                    foreach ($istruttori_corsi as $row):
+                        $istr = $row['i_nome'] . ' ' . $row['i_cognome'];
+
+                        if ($istr != $current_istr):
+                            if ($current_istr) echo '</div>';
+                            $current_istr = $istr;
+                            echo "<div class='istruttore'><h3>$istr</h3>";
+                        endif;
+
+                        if ($row['id_corso']):
+                            echo "<h4>{$row['nome_corso']} (Livello: {$row['livello_difficolta']}, Durata: {$row['durata_minuti']} min)</h4>";
+
+                            $iscritti_corso = isset($iscrizioni_per_corso[$row['id_corso']]) ? $iscrizioni_per_corso[$row['id_corso']] : [];
+
+                            if (!empty($iscritti_corso)):
+                                echo '<table><tr><th>Nome</th><th>Cognome</th><th>Data Isc.</th><th>Orario</th></tr>';
+                                foreach ($iscritti_corso as $iscritto):
+                                    echo "<tr><td>{$iscritto['m_nome']}</td><td>{$iscritto['m_cognome']}</td><td>{$iscritto['data_iscrizione']}</td><td>{$iscritto['orario_preferito']}</td></tr>";
+                                endforeach;
+                                echo '</table>';
+                            else:
+                                echo '<p style="color: #666; font-style: italic;">Nessun iscritto</p>';
+                            endif;
+                        endif;
+                    endforeach;
+                    if ($current_istr) echo '</div>';
+                } catch (Exception $e) {
+                    echo '<div class="error">Errore nel caricamento del report: ' . $e->getMessage() . '</div>';
+                }
+                ?>
+            <?php endif; ?>
+        </main>
     <?php endif; ?>
 </div>
 </body>
