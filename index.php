@@ -144,6 +144,14 @@ $istruttori = $pdo->query("SELECT * FROM Istruttori ORDER BY nome, cognome")->fe
                     <?php endwhile; ?>
                 </table>
 
+            <?php elseif ($action == 'list'): ?>
+                <h2>Iscritti Corso</h2>
+                <?php
+                $corso_sel = isset($_GET['corso']) ? $_GET['corso'] : '';
+                if ($corso_sel): ?>
+                    <h3>Iscritti a <?php echo $corsi[array_search($corso_sel, array_column($corsi, 'id_corso'))]['nome_corso']; ?></h3>
+                    <table>
+                        <tr><th>Nome</th><th>Cognome</th><th>Azione</th></tr>
 
     <?php endif; ?>
 </div>
